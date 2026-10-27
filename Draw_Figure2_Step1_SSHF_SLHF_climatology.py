@@ -1,0 +1,78 @@
+import gc
+import itertools
+import os
+import subprocess
+import sys
+import random
+from concurrent.futures import ProcessPoolExecutor
+from glob import glob
+from pathlib import Path
+from pprint import pprint
+
+import numpy as np
+import xarray as xr
+
+import Liang_funcs
+
+import cartopy.crs as ccrs
+import cartopy.mpl.ticker as cticker
+from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+from matplotlib.colors import BoundaryNorm
+
+year_start=1997
+year_end=2023
+time_len = 4 # number of data in each month
+lat_len=60  # 3deg
+lon_len=120   # 3deg
+
+# Land-sea mask
+lsm = np.zeros((lat_len, lon_len))
+infile_lsm = "../Data/ERA5_regridded_3.0deg_7day/lsm.nc"
+dsm=xr.open_dataset(infile_lsm)
+dsm = dsm.rename({'lon': 'longitude', 'lat': 'latitude'})  
+dsm.transpose('latitude', 'longitude')
+print(dsm)
+lsm=dsm["__xarray_dataarray_variable__"]  
+
+for month in range(1, 13) :
+
+  x1  = np.zeros(((time_len)*(year_end-year_start+1), lat_len, lon_len ))
+  x2  = np.zeros(((time_len)*(year_end-year_start+1), lat_len, lon_len ))
+  x1d = np.zeros(((time_len-1)*(year_end-year_start+1), lat_len, lon_len ))
+  x2d = np.zeros(((time_len-1)*(year_end-year_start+1), lat_len, lon_len ))
+
+  x1c = np.zeros(((time_len), lat_len, lon_len )) # climatology
+  x2c  = np.zeros(((time_len), lat_len, lon_len ))
+  
+  for year in range(year_start, year_end +1) : 
+
+    print(f"==== year: {year}")
+    
+    infile1 = f"../Data/ERA5_regridded_3.0deg_7day/sshf_3deg_7d_{year}{month:02}.nc"
+    infile2 = f"../Data/ERA5_regridded_3.0deg_7day/slhf_3deg_7d_{year}{month:02}.nc"    
+    
+    ds1 = xr.open_dataset(infile1)
+    #print(ds1.dims)
+
+    ds1 = ds1.rename({'lon': 'longitude', 'lat': 'latitude'})
+    #print(ds1.dims)
+    ds1 = ds1.transpose('latitude', 'longitude', 'time')
+    #print(ds1.dims)
+
+    ds2 = xr.open_dataset(infile2)    
+    
+    ds2 = ds2.rename({'lon': 'longitude', 'lat': 'latitude'})
+    #print(ds2.dims)
+    ds2 = ds2.transpose('latitude', 'longitude', 'time')
+    #print(ds2.dims)
+    
+    for time in range(0,time_len) :    
+      x1c[time,:,:] += ds1["__xarray_dataarray_variable__"].isel(time=time) / (year_end-year_start+1)
+      x2c[time,:,:] += ds2["__xarray_dataarray_variable__"].isel(time=time) / (year_end-year_start+1)
+    
+  # Output
+  np.save(f"Fig_data/SSHF_clim_mon{month:02}.npy",np.mean(x1c, axis=0))
+  np.save(f"Fig_data/SLHF_clim_mon{month:02}.npy",np.mean(x2c, axis=0))
